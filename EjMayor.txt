@@ -1,0 +1,19 @@
+inicio
+
+float @a.
+float @b.
+
+
+
+
+ingresar(@a).
+ingresar(@b).
+
+float @suma1 = @a + @b.
+
+mostrar(@suma1).
+
+
+ 
+fin
+

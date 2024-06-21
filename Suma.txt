@@ -1,0 +1,18 @@
+inicio
+
+ent @a.
+ent @b.
+
+
+
+
+ingresar(@a).
+ingresar(@b).
+
+ent @suma1 = @a + @b.
+
+mostrar(@suma1).
+
+
+ 
+fin

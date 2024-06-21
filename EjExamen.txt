@@ -1,0 +1,58 @@
+
+
+inicio 
+
+
+
+ent @num1.
+ent @num2.
+ent @num3.
+ent @num4.
+ent @resultado1.
+ent @resultado2.
+
+mostrar("Digite el primer numero"+"\n").
+ingresar(@num1).
+mostrar("digite el segundo numero"+"\n").
+ingresar(@num2).
+mostrar("Digite el tercer numero"+"\n").
+ingresar(@num3).
+mostrar("Digite el cuarto numero"+"\n").
+ingresar(@num4).
+
+
+ent @suma1.
+
+ent @suma2. 
+
+@suma1 = @num1 + @num4
+
+@suma2 = @num2 + @num3
+
+@resultado1 = @suma1.
+@resultado2= @suma2.
+
+mostrar("El resultado de la suma 1 es" + @resultado1).
+mostrar("\n").
+mostrar("El resultado de la suma 2 es" + @resultado2).
+mostrar("\n").
+
+si(@suma1 myq @suma2){ 
+mostrar(@suma1+ " Es mayor que " +@suma2).
+mostrar("\n").
+}
+si(@suma1 igu @suma2){
+ mostrar(@suma1 +" Es igual que "+  @suma2).
+mostrar("\n").
+
+}sino{
+mostrar(@suma1+" Es menor que "+ @suma2).
+mostrar("\n").
+}
+
+
+
+
+
+fin
+

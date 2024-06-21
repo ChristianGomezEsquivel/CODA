@@ -1,0 +1,12 @@
+
+L1: ent   @a
+L2: ent   @b
+L3: ingresar @a 
+L4: ingresar @b 
+L5: ent   @suma1
+operador  arg1  arg2  Resultado   
+   +       @a     @b       T0
+           T0            @b
+
+
+L6: mostrar @suma1 

@@ -1,0 +1,1817 @@
+options{
+    STATIC = false;
+}
+
+PARSER_BEGIN(CODA)
+
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+
+public class CODA{
+
+    //Variable para error (Bandera de errores)
+    static int error = 0;
+
+    //variables para semantica-------------------------------
+    String Type="";
+    String Valor=""; //variables cache para capturar el par
+    String IDenUso="";
+    java.util.ArrayList<ParOrd> ParOrdenado = new java.util.ArrayList<ParOrd>(); //Lista de IDs
+    
+    //--------------------------------------------------------
+    String ruta = "C:/CODA/EjTabla.txt";
+    int label = 0;//Etiquetas usadas en Bucle
+    String var;
+    String CI = ""; //Almacén de Código Intermedio
+    int labelB = 0;//Etiquetas usadas en Bucle
+    String variable = "";
+    String operacion = "";
+    String cantidad = "";
+    CTDOA codigo_aritmetico = new CTDOA();
+    boolean vigilanteId = true;
+    EscrituraCI ECI = new EscrituraCI(ruta);//Escritura de Código Intermedio
+
+    //Inicio varibales para Ensamblador-----------------------------------------------------------------------------
+    static String Call = "cmd /k start C:/CODA/Ensamble.bat";
+    GeneradorObj trans = new GeneradorObj("C:/CODA/CodigoObj.cpp");
+    //Fin varibales para Ensamblador-----------------------------------------------------------------------
+    int bandf=0;
+
+    public static void main (String args []) throws ParseException{
+        CODA analizador = new CODA(System.in);
+        System.out.println("-------- CODA ---------\n");
+        //analizador.Inicio();
+        analizador.Gramatica();
+        if(error == 0){
+            System.out.println("C\u00f3digo sin errores\n");
+            try {
+              Runtime.getRuntime().exec(Call);
+            }
+            catch(java.io.IOException e) {
+                e.printStackTrace();
+            }  
+        }
+        System.out.println("\nCompilaci\u00f3n finalizada");
+    }
+}
+
+class ParOrd{ //int i
+
+    String tipo, id;
+
+    public ParOrd(String tipo, String id){//
+        this.tipo = tipo;
+        this.id = id;        
+    }
+}
+
+class CTDOA {//CÓDIGO de TRES DIRECCIONES para OPERACIONES ARITMÉTICAS
+    
+    private java.util.ArrayList<String> list;
+    private String codigo="",//codigo de 3 direcciones
+            v1="", v2="", op="";
+    private int no_var=0; String nombreVariable = "T"; //genera la variable temporal
+    private int r1,r2,r3;//posiciones de la lista las cuales se modifican
+    private int defecto = 1;//posicion de la lista donde se pone a evaluar
+    private boolean prioridad = false; //true para prioridad aritmeta nivel 1, fakse para nivel 2
+    private boolean listaRecorrida = false;
+    
+    public CTDOA(){
+        list = new java.util.ArrayList<String>();
+    }
+    //version 1
+    /*
+    public void add(String s){
+        this.list.add(s);
+    }
+    */
+    //version 2
+    public void add(String s) {
+        String s0 = "";
+        boolean in = true;
+        int l = list.size();
+        int i = (l > 0) ? (l - 1) : 0;
+        l = 0;
+        for (String e : list) {//se obtiene el ultimo dato
+            if (l == i) s0 = e;            
+            l++;
+        }
+        switch (s0) {
+            case "1":
+                if (s.equals("*")) {
+                    //System.out.println("quitar");                    
+                    in = false;
+                }
+                break;
+            case "/":
+            case "*":
+                if (s.equals("1")) {
+                    //System.out.println("quitar");                    
+                in = false;
+                }
+                break;
+        }
+
+        if (in) {
+            this.list.add(s);
+        } else {
+            list.set(i, "r0");
+            list.remove("r0");
+        }
+    }
+    
+    public String generarCodigo(){
+
+        while(!listaRecorrida){            
+            nivel1(defecto);
+            if(prioridad){
+                generarVariable();
+                codigo += "   "+op  + "       " + v1 + "     " + v2+ "       " + nombreVariable+"\n";
+                list.set(r1, "r");
+                list.set(r2, "r1");
+                list.set(r3, nombreVariable);
+                list.remove("r");
+                list.remove("r1");
+                
+                prioridad=false;
+            }
+        }
+        
+        if(list.size() >= 3)listaRecorrida = false;
+        else listaRecorrida = true;
+        
+        while(!listaRecorrida){
+            nivel2();
+            generarVariable();
+            codigo += "   "+op  + "       " + v1 + "     " + v2+ "       " + nombreVariable+"\n";
+            list.set(0, "r");
+            list.set(1, "r1");
+            list.set(2, nombreVariable);
+            list.remove("r");
+            list.remove("r1");
+        }
+        return this.codigo;
+    }
+    private void nivel1(int i){//para depurar de operaciones nivel 1(*,/,%)
+        int j =1;
+        int k =1;  
+        boolean t = false;
+        
+        for(String e : list){
+            if(j >= i){                
+                if( k == 1) v1 = e;
+                else if (k == 2){
+                    if(!e.equals("+") && !e.equals("-")){
+                         op = e;
+                         r3=j;
+                         r2=j-1;
+                         r1 = r2-1;
+                         prioridad = true;
+                    }else defecto = j+1;
+                }
+                else if (k == 3) {
+                    if (prioridad)v2 = e;                                           
+                    t = true;                    
+                }               
+                k++;
+            }
+            if (t) break;
+            j++;
+        }
+        if(j == list.size()) listaRecorrida = true;
+    }
+    private void nivel2(){
+        int k = 1;
+        for(String e : list){
+            if(k == 1) v1 = e;
+            if(k == 2) op = e;
+            if(k == 3) {
+                v2 = e;
+                break;
+            }
+            k++;
+        }
+        if(k == list.size()) listaRecorrida = true;
+    }   
+    
+    private String generarVariable(){
+        nombreVariable="T"+(no_var++);
+        return nombreVariable;
+    }  
+    public int longitud() {
+        return list.size();
+    } 
+}
+
+class GeneradorObj {
+    private java.io.File f;
+    
+    public GeneradorObj(String ruta){
+        f = new java.io.File(ruta);
+        CleanCPP();
+        EscribirCod(
+            "#include <stdio.h>\n"+
+            "#include <iostream>\n"+
+            "#include <string>\n"+
+            "#include <cstring>\n"+
+	    "#include <locale.h>\n"+
+            "using namespace std;\n"+
+            "int main(){\n"+
+	    "setlocale(LC_ALL,\"Spanish\");\n"
+        );
+
+    }
+
+    public static void main(String[] args){
+        java.awt.EventQueue.invokeLater(new Runnable() {
+            public void run() {
+                GeneradorObj pe = new GeneradorObj("C:/CODACodigoObj.cpp");
+                pe.EscribirCod("cout << \"prueba transcrita\";\n");
+                pe.end_to_CPlus();
+            }
+        });        
+    }
+    
+    public void EscribirCod(String s){//Transcribe el codigo
+//Escritura
+        try {
+
+            java.io.FileWriter w = new java.io.FileWriter(f , true);
+
+            java.io.BufferedWriter bw = new java.io.BufferedWriter(w);
+
+            java.io.PrintWriter wr = new java.io.PrintWriter(bw);
+            wr.write(s);//escribimos en el archivo
+
+            //wr.append("\n"); //concatenamos en el archivo sin borrar lo existente
+
+            //ahora cerramos los flujos de canales de datos, al cerrarlos el archivo quedará guardado con información escrita
+            //de no hacerlo no se escribirá nada en el archivo
+            wr.close();
+            bw.close();
+        } catch (java.io.IOException e) {
+            e.printStackTrace();
+            System.out.println("no se pudo escribir");
+        }
+    }
+
+    private void CleanCPP(){
+        //Escritura
+        try {
+
+            java.io.FileWriter w = new java.io.FileWriter(f , false);
+
+            java.io.BufferedWriter bw = new java.io.BufferedWriter(w);
+
+            java.io.PrintWriter wr = new java.io.PrintWriter(bw);
+            
+            wr.write("");//Escribimos en el archivo.
+
+            //wr.append("\n"); //Concatenamos en el archivo sin borrar lo existente.
+
+            //Ahora cerramos los flujos de canales de datos, al cerrarlos el archivo quedará guardado con información escrita.
+            //de no hacerlo no se escribirá nada en el archivo.
+            wr.close();
+            bw.close();
+        } catch (java.io.IOException e) {
+            e.printStackTrace();
+            System.out.println("No se puedo limpiar");
+        }
+    }
+
+    public void end_to_CPlus(){
+        EscribirCod("system(\"pause\");\nreturn 0;\n}");
+    }
+}
+
+class EscrituraCI {
+    
+    private File f;
+
+    public EscrituraCI(String ruta) {
+        f = new File(ruta);
+        limpiarTxt();
+    }
+    private void limpiarTxt(){
+        //Escritura
+        try {
+
+            FileWriter w = new FileWriter(f , false);
+
+            BufferedWriter bw = new BufferedWriter(w);
+
+            PrintWriter wr = new PrintWriter(bw);
+            
+            wr.write("");//Escribimos en el archivo.
+
+            //wr.append("\n"); //Concatenamos en el archivo sin borrar lo existente.
+
+            //Ahora cerramos los flujos de canales de datos, al cerrarlos el archivo quedará guardado con información escrita.
+            //de no hacerlo no se escribirá nada en el archivo.
+            wr.close();
+            bw.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("No se pudo escribir");
+        }
+    }
+
+    public void EscribirOA(String s){//Escribe Operaciones Aritméticas
+        //Escritura
+        try {
+
+            FileWriter w = new FileWriter(f , true);
+
+            BufferedWriter bw = new BufferedWriter(w);
+
+            PrintWriter wr = new PrintWriter(bw);
+            wr.write("\n"+"operador  " + "arg1  " + "arg2  " + "Resultado   \n");
+            wr.write(s);//Escribimos en el archivo.
+
+            //wr.append("\n"); //Concatenamos en el archivo sin borrar lo existente.
+
+            //Ahora cerramos los flujos de canales de datos, al cerrarlos el archivo quedará guardado con información escrita.
+            //de no hacerlo no se escribirá nada en el archivo.
+            wr.close();
+            bw.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("No se pudo escribir");
+        }
+    }
+
+    public void EscribirD(String s){//Escribe Declaraciones
+        try {
+
+            FileWriter w = new FileWriter(f , true);
+
+            BufferedWriter bw = new BufferedWriter(w);
+
+            PrintWriter wr = new PrintWriter(bw);
+            wr.write(s);//Escribimos en el archivo.
+
+            //wr.append("\n"); //Concatenamos en el archivo sin borrar lo existente.
+
+            //Ahora cerramos los flujos de canales de datos, al cerrarlos el archivo quedará guardado con información escrita.
+            //de no hacerlo no se escribirá nada en el archivo.
+            wr.close();
+            bw.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("No se pudo escribir");
+        }
+    }
+    
+    public void EscribirB(String s){
+        
+        try {
+
+            FileWriter w = new FileWriter(f , true);
+
+            BufferedWriter bw = new BufferedWriter(w);
+
+            PrintWriter wr = new PrintWriter(bw);
+            wr.write(s);//Escribimos en el archivo.
+            //wr.append("\n"); //Concatenamos en el archivo sin borrar lo existente.
+
+            //Ahora cerramos los flujos de canales de datos, al cerrarlos el archivo quedará guardado con información escrita.
+            //de no hacerlo no se escribirá nada en el archivo.
+            wr.close();
+            bw.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("No se pudo escribir");
+        }
+    }
+
+}
+PARSER_END(CODA)
+SKIP: {
+    " "
+    |"\r"
+    |"\t"
+    |"\n"
+}
+
+TOKEN:{ //Palabras reservadas
+    < INICIO: "inicio"> 
+    |<FIN: "fin"> 
+    |<ENTERO: "ent">
+    |<FLOAT: "flot">
+    |<CADENA: "cad"> 
+    |<INPUT: "ingresar"> 
+    |<OUTPUT: "mostrar"> 
+    |<CondIF: "si">
+    |<CondIF_ELSE:"sino">  
+    |<RWhile: "mientras"> 
+    |<RFor: "parar"> 
+}
+
+TOKEN:{ //Operadores{
+    //MATEMATICOS
+    <SUMA: "+">  
+    |<RESTA: "-">
+    |<DIVISION: "/">
+    |<MULTIPLICACION: "*"> 
+    |<RESIDUO: "$">
+    //LOGICOS
+    |<AND: "&&">
+    |<OR: "|">
+    |<NOT: "!">
+    //COMPARADORES
+    |<CompMAYOR: "myq">
+    |<CompMENOR: "mnq">
+    |<CompMAY_IGUAL: "myiq">
+    |<CompMEN_IGUAL: "mniq"> 
+    |<CompIGUAL: "igu"> 
+    |<CompDIFERENTE: "dif"> 
+    |<ParentA: "("> 
+    |<ParentC: ")">
+    |<CorchA: "[">
+    |<CorchC: "]"> 
+    |<LlaveA: "{"> 
+    |<LlaveC: "}"> 
+    |<ASIGNAR: "="> 
+    |<AUMENTAR: "aum">
+    |<DISMINUIR: "dism">
+    |<PUNTO: ".">
+    |<DPUNTOS: ":">
+}
+
+TOKEN:{ //Dinamicos
+    <ALFABETO: (["a"-"z","A"-"Z"])(["a"-"z","A"-"Z"])*>
+    |<ID_VARIABLE : ("@")(["a"-"z","A"-"Z"])(["a"-"z","A"-"Z"]|["0"-"9"])*>
+    |<PALABRAS: (["a"-"z","A"-"Z"])(["a"-"z","A"-"Z"])*>
+    |<NUM_ENTERO: (["0"-"9"])+>
+    |<NUM_FLOTANTE: (["0"-"9"])+(".")(["0"-"9"])+>
+    |<CADENAS: "\""(~["\""])*"\""> 
+
+}
+
+TOKEN:{
+    <ERRORES:
+     "~"
+    |">"
+    |"<"
+    |">="
+    |"<="
+    |"&"
+    |"¡"
+    |"\\"
+    |"''"
+    |"¿"
+    |"?"
+    |"#"
+    |"^"
+    |"_"
+    |"||"
+    |"`"
+    |"¨"
+    |"°"
+    |"%"
+    |"!="
+    |";"
+    |"÷"
+    |("@")(["0"-"9"])(["a"-"z","A"-"Z"])+(["0"-"9"])*
+    //|("@")(["a"-"z","A"-"Z"])(["a"-"z","A"-"Z"]|["0"-"9"]|("'"))* //EN CASO DE QUE AGREGUE UN CARACTER INVALIDO A LA VARIABLE
+    >
+}
+
+
+// -------------------------- INICIO DE GRAMATICAS ---------------------------------------------------
+
+
+//---------------------------------- PRINICIPAL ------------------------
+void Gramatica():{} // inicio .... fin
+{
+    Inicio()
+    (Sentencias())*
+    Fin()
+}
+
+void Sentencias():{} //Dentro está todo lo que puedes hacer
+{
+    Declaraciones()
+    |If()
+    |Acciones()
+    |Ciclos()
+}
+
+//-------------------------- INICIO Y FINAL -----------------
+void Inicio():{}//ERROR PALABRA INICIO
+{
+    <INICIO>
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba la palabra inicio"); error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 la palabra 'inicio'");error=1;}
+}
+
+void Fin():{}//ERROR PALABRA FIN
+{
+    <FIN>{trans.end_to_CPlus();}
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba la palabra fin");error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 la palabra 'fin'");error=1;}
+}
+
+//------------------------- DECLARACIONES Y ASIGNACIONES -----------------------
+void Declaraciones():{}
+{
+    (<ENTERO>{
+        Type = "ent";
+        trans.EscribirCod("int ");
+    } IdentificadorDec() {
+        Valor = token.image + "";
+        IDenUso = Valor;
+        validacionIDs();
+        DeclaracionesEnteros();
+    })
+    | (<CADENA>{
+        Type = "cad";
+        trans.EscribirCod("string ");
+    } IdentificadorDec(){
+        Valor = token.image + "";
+        validacionIDs();
+        DeclaracionesCadenas();
+    })
+    |(<FLOAT>{
+        Type = "flot";
+        trans.EscribirCod("float ");
+    } IdentificadorDec() {
+        Valor = token.image + "";
+        validacionIDs();
+        DeclaracionesFlotantes();
+    })
+    |<ID_VARIABLE> {
+        Valor = token.image + "";
+        String v=remfc(token.image);
+        trans.EscribirCod(v);
+        validacionAsig();
+    }
+}
+
+//-------------------------------------------------------- FLOTANTES ---------------------------------------------------------------
+void DeclaracionesFlotantes() throws ParseException:{}
+{
+    <ASIGNAR>{
+        trans.EscribirCod("= ");
+        DeclaracionesFlotantes2();
+    }
+    |<NUM_FLOTANTE>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        error=1;
+        DeclaracionesFlotantesTerminales();
+    }
+    |<NUM_ENTERO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        error=1;
+        DeclaracionesFlotantesTerminales();
+    }
+    |<CADENAS>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un valor num\u00e9rico");
+        error=1;
+        DeclaracionesFlotantesTerminales();
+    }
+    |<ID_VARIABLE>{
+        Valor = token.image+"";
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        error=1;
+        validacionFlot();
+        DeclaracionesFlotantesTerminales();
+    }    
+    |<SUMA>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        trans.EscribirCod("+ ");
+        DeclaracionesFlotantes2();
+    }
+    |<MULTIPLICACION>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        trans.EscribirCod("* ");
+        DeclaracionesFlotantes2();
+    }
+    |<RESTA>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        trans.EscribirCod("- ");
+        DeclaracionesFlotantes2();
+    }
+    |<DIVISION>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        trans.EscribirCod("/ ");
+        DeclaracionesFlotantes2();        
+    }
+    |<RESIDUO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        trans.EscribirCod("% ");
+        DeclaracionesFlotantes2();        
+    }
+    | <PUNTO>{trans.EscribirCod(";\n");} 
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 no se ingres\u00f3 el '.'");error=1;}    
+}
+
+void DeclaracionesFlotantes2() throws ParseException:{}
+{
+    <NUM_FLOTANTE>{
+        trans.EscribirCod(token.image + " ");
+        DeclaracionesFlotantesTerminales();
+    }
+    |<NUM_ENTERO>{
+        trans.EscribirCod(token.image + " ");
+        DeclaracionesFlotantesTerminales();
+    }
+    |<ID_VARIABLE>{
+        Valor = token.image+"";
+        String v=remfc(token.image);
+        trans.EscribirCod(v);
+        validacionFlot();
+        DeclaracionesFlotantesTerminales();
+    }
+    |<CADENAS>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un valor num\u00e9rico");error=1;
+        DeclaracionesFlotantesTerminales();
+    }
+    |<ALFABETO>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un valor num\u00e9rico");error=1;
+        DeclaracionesFlotantesTerminales();
+    }
+    |{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        error=1;
+        DeclaracionesFlotantesTerminales();
+    } 
+}
+
+void DeclaracionesFlotantesTerminales() throws ParseException:{}
+{
+    //TERMINAL
+    <PUNTO>{
+        trans.EscribirCod(";\n");
+    } 
+    //NO-TERMINALES ACEPTADOS
+    |<SUMA>{
+        trans.EscribirCod("+ ");
+        DeclaracionesFlotantes2();
+    }
+    |<MULTIPLICACION>{
+        trans.EscribirCod("* ");
+        DeclaracionesFlotantes2();
+    }
+    |<RESTA>{
+        trans.EscribirCod("- ");
+        DeclaracionesFlotantes2();
+    }
+    |<DIVISION>{
+        trans.EscribirCod("/ ");
+        DeclaracionesFlotantes2();        
+    }
+    |<RESIDUO>{
+        trans.EscribirCod("% ");
+        DeclaracionesFlotantes2();        
+    } 
+    |<ID_VARIABLE>{
+        Valor = token.image+"";
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +,-,*");
+        validacionFlot();
+        DeclaracionesFlotantesTerminales();
+        error = 1;
+    }   
+    |<NUM_ENTERO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +,-,*");
+        error=1;
+        DeclaracionesFlotantesTerminales();
+    }
+    |<NUM_FLOTANTE>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +,-,*");
+        error=1;
+        DeclaracionesFlotantesTerminales();
+    }
+    |<CADENAS>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +,-,*");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un valor num\u00e9rico");
+        error=1;
+        DeclaracionesFlotantesTerminales();
+    }
+    |<ALFABETO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +,-,*");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un valor num\u00e9rico");
+        error=1;
+        DeclaracionesFlotantesTerminales();        
+    }
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el '.'");error=1;}    
+}
+
+//------------------------------------------------ FIN FLOTANTES ---------------------------------------------------------------
+
+//-------------------------------------------------- CADENAS ----------------------------------------------------------
+void DeclaracionesCadenas()throws ParseException:{}
+{
+    <ASIGNAR>{
+        trans.EscribirCod("= ");
+        ECI.EscribirD(" "+token.image);
+        DeclaracionesCadenas2();
+    }
+    |<CADENAS>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se esperaba el s\u00edmbolo de asignacion '='");error=1;
+        ECI.EscribirD(" "+token.image);
+        DeclaracionesCadenasTerminales();
+    }
+    |<NUM_ENTERO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se esperaba el s\u00edmbolo de asignacion '='");error=1;
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba una cadena");        
+        DeclaracionesCadenasTerminales();
+    }
+    |<NUM_FLOTANTE>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se esperaba el s\u00edmbolo de asignacion '='");error=1;
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba una cadena");
+        DeclaracionesCadenasTerminales();
+    }
+    |<ID_VARIABLE>{
+        Valor = token.image+"";
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se esperaba el s\u00edmbolo de asignacion '='");
+        error=1;
+        validacionCad();
+        DeclaracionesCadenasTerminales();
+    } 
+    |<SUMA>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        trans.EscribirCod("+ ");
+        DeclaracionesCadenas2();
+    }
+    |<MULTIPLICACION>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba +");
+        trans.EscribirCod("* ");
+        DeclaracionesCadenas2();
+    }
+    |<RESTA>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba +");
+        trans.EscribirCod("- ");
+        DeclaracionesCadenas2();
+    }
+    |<DIVISION>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba +");
+        trans.EscribirCod("/ ");
+        DeclaracionesCadenas2();        
+    }
+    |<RESIDUO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba +");
+        trans.EscribirCod("% ");
+        DeclaracionesCadenas2();        
+    }       
+    | <PUNTO>{trans.EscribirCod(";\n");}
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el '.'");error=1;} 
+}
+void DeclaracionesCadenas2()throws ParseException:{}
+{
+    <CADENAS> {
+        trans.EscribirCod(token.image+" "); 
+        ECI.EscribirD(" "+token.image);
+        DeclaracionesCadenasTerminales();
+    }
+    |<ID_VARIABLE>{
+        Valor = token.image+"";
+        String v=remfc(token.image);
+        trans.EscribirCod(v);
+        validacionCad();
+        DeclaracionesCadenasTerminales();
+    }
+    | <NUM_ENTERO>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba una cadena");error=1;
+        DeclaracionesCadenasTerminales();    
+    }
+    | <NUM_FLOTANTE>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba una cadena");error=1;
+        DeclaracionesCadenasTerminales();        
+    }
+    |<ALFABETO>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba una cadena");error=1;
+        DeclaracionesCadenasTerminales();          
+    }
+    |{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        error=1;
+        DeclaracionesCadenasTerminales();
+    }  
+
+}
+void DeclaracionesCadenasTerminales() throws ParseException:{}
+{
+      //TERMINAL
+    <PUNTO>{trans.EscribirCod(";\n");}
+    //NO-TERMINALES ACEPTADOS
+    |<SUMA>{
+        ECI.EscribirD(" "+token.image);
+        trans.EscribirCod("+ ");
+        DeclaracionesCadenas2();
+    }
+    |<MULTIPLICACION>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba +");
+        error=1;       
+        DeclaracionesCadenas2();
+    }
+    |<RESTA>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba +");
+        error=1;
+        DeclaracionesCadenas2();
+    }
+    |<DIVISION>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba +");
+        error=1;
+        DeclaracionesCadenas2();        
+    }
+    |<RESIDUO>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba +");
+        error=1;
+        DeclaracionesCadenas2();
+    }
+    |<NUM_ENTERO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba una cadena");
+        error=1;
+        DeclaracionesCadenasTerminales();
+    }
+    |<NUM_FLOTANTE>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba una cadena");
+        error=1;
+        DeclaracionesCadenasTerminales();
+    }
+    |<CADENAS>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +");
+        error=1;
+        DeclaracionesCadenasTerminales();
+    }
+    |<ALFABETO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba una cadena");error=1;
+        error = 1;
+        DeclaracionesCadenasTerminales();          
+    }    
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el '.'");error=1;}  
+}
+//------------------------------------------- FIN CADENAS --------------------------------------------------
+
+//---------------------------------------ENTEROS ---------------------------------------------------------
+void DeclaracionesEnteros()throws ParseException:{}
+{    
+    <ASIGNAR>{
+        trans.EscribirCod("= ");
+        codigo_aritmetico = new CTDOA();
+        DeclaracionesEnteros2();
+    }
+    |<NUM_ENTERO>{
+       System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se esperaba un el s\u00edmbolo de asignacion =");error=1;
+        DeclaracionesEnterosTerminales(); 
+    } 
+    |<NUM_FLOTANTE>{
+       System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se esperaba un el s\u00edmbolo de asignacion =");error=1;
+       System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un n\u00famero entero");
+       DeclaracionesEnterosTerminales();         
+    }
+    |<CADENAS>{
+       System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se esperaba un el s\u00edmbolo de asignacion =");error=1;
+       System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un n\u00famero entero");
+        DeclaracionesEnterosTerminales();         
+    } 
+    |<ID_VARIABLE>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se esperaba un el s\u00edmbolo de asignacion =");error=1;
+        Valor = token.image+"";
+        validacionEnt();
+        DeclaracionesEnterosTerminales();
+    } 
+    |<SUMA>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        error = 1;
+        trans.EscribirCod("+ ");
+        DeclaracionesEnteros2();
+    }
+    |<MULTIPLICACION>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        trans.EscribirCod("* ");
+        DeclaracionesEnteros2();
+    }
+    |<RESTA>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        trans.EscribirCod("- ");
+        DeclaracionesEnteros2();
+    }
+    |<DIVISION>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        trans.EscribirCod("/ ");
+        DeclaracionesEnteros2();        
+    }
+    |<RESIDUO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        trans.EscribirCod("% ");
+        DeclaracionesEnteros2();       
+    }     
+    | <PUNTO>{trans.EscribirCod(";\n");}
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el '.'");error=1;} 
+
+}
+void DeclaracionesEnteros2()throws ParseException:{}
+{
+    <NUM_ENTERO> {
+        codigo_aritmetico.add(token.image+"");
+        var = ""+token.image;
+        trans.EscribirCod(token.image);
+        DeclaracionesEnterosTerminales();
+    }
+    |<ID_VARIABLE>{
+        Valor = token.image+"";
+        codigo_aritmetico.add(token.image+"");
+        var = ""+token.image;
+        validacionEnt();
+        String v=remfc(token.image);
+        trans.EscribirCod(v);
+        DeclaracionesEnterosTerminales();
+    }
+    | <CADENAS>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un n\u00famero entero");error=1;
+        DeclaracionesEnterosTerminales();    
+    }
+    | <ALFABETO>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un n\u00famero entero");error=1;
+        DeclaracionesEnterosTerminales();    
+    }
+    |<NUM_FLOTANTE>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un n\u00famero entero");error=1;
+        DeclaracionesEnterosTerminales();        
+    }
+    |{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        error=1;
+        DeclaracionesEnterosTerminales();
+    } 
+
+}
+void DeclaracionesEnterosTerminales()throws ParseException:{}
+{
+    <PUNTO>{
+        if(vigilanteId){
+            if(codigo_aritmetico.longitud()>=3){                
+                CI += codigo_aritmetico.generarCodigo();
+                CI += "      " + "     " + codigo_aritmetico.nombreVariable + "            " + Valor + "\n\n";
+                ECI.EscribirOA(CI);
+                codigo_aritmetico = new CTDOA(); 
+                CI = "";
+            }else{  
+                ECI.EscribirOA( "   =       " + var + "             "+ Valor + "\n\n");//Al ser correcta la declaración se genera el código intermedio
+            }
+        }else vigilanteId = true;        
+        
+        codigo_aritmetico = new CTDOA();
+        trans.EscribirCod(";");
+    }
+    |<SUMA>{
+        codigo_aritmetico.add(token.image);
+        trans.EscribirCod(" + ");
+        DeclaracionesEnteros2();
+    }
+    |<MULTIPLICACION>{
+        codigo_aritmetico.add(token.image);
+        trans.EscribirCod(" * ");
+        DeclaracionesEnteros2();
+    }
+    |<RESTA>{
+        codigo_aritmetico.add(token.image);
+        trans.EscribirCod(" - ");
+        DeclaracionesEnteros2();
+    }
+    |<DIVISION>{
+        codigo_aritmetico.add(token.image);
+        trans.EscribirCod(" / ");
+        DeclaracionesEnteros2();        
+    }
+    |<RESIDUO>{
+        codigo_aritmetico.add(token.image);
+        trans.EscribirCod("% "); 
+        DeclaracionesEnteros2();        
+    }    
+    |<NUM_ENTERO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +,-,*");
+        error = 1;
+        DeclaracionesEnterosTerminales();
+    }
+    |<NUM_FLOTANTE>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +,-,*");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un n\u00famero entero");
+        error=1;
+        DeclaracionesEnterosTerminales();
+    }
+    |<CADENAS>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +,-,*");
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un n\u00famero entero");
+        error=1;
+        DeclaracionesEnterosTerminales();
+    }
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el '.'");error=1;}
+}
+
+//-------------------------------------- FIN ENTEROS ------------------------------------------------------------
+
+//------------------------------------------------------ FIN DE DECLARACIONES Y ASIGNACIONES --------------------------------------------------------
+
+
+// ------------------------------- INICIO DE MAS GRAMATICAS ------------------------------------------------------------
+
+//----------------- IN Y OUT ------------------------------------------------------
+
+void Acciones():{}
+{
+    Entrada()
+    |Salida()
+}
+
+//GRAMATICA PARA EL IN = ingresar(@a).
+
+void Entrada():{}
+{
+    En(){ECI.EscribirB("\nL"+(++label)+": "+token.image+" ");}AParentIO()Identificador(){ECI.EscribirB(token.image+" ");}CParentIO()Punto()
+}
+
+//GRAMATICA PARA EL OUT = mostrar(@a) o mostrar("hola")
+
+void Salida():{}
+{
+    Sal(){ECI.EscribirB("\nL"+(++label)+": "+token.image+" ");}AParentIO()(Cadenas()[Concatenar()]){ECI.EscribirB(token.image+" ");}CParentIO()Punto()
+}
+
+void Concatenar():{}
+{
+    <SUMA>{trans.EscribirCod("<<");}Cadenas()[Concatenar()]
+}
+
+//----------------------------------------------------- CONDICIONALES Y CICLOS -----------------------------------
+
+//CONDICION UTILIZADA PARA CICLOS Y CONDICIONALES @a < @b por ejemplo
+void Condic():{}
+{
+    Identificador(){
+        ECI.EscribirB(token.image+" ");
+        validarTipo(); //SE DIRIGE PARA VER QUE TIPO DE DATO ES Y PODER REALIZAR LA COMPARACION ADECUADA
+    }
+}
+
+JAVACODE
+void validarTipo()
+{
+    String tipo = "";
+    boolean v = false;
+    for(ParOrd e : ParOrdenado){
+        if(e.id.equals(Valor)){
+            v = true;
+            if(e.tipo == "cad"){
+                CondCad();//SI ES DE TIPO CADENA SE DIRIGE A CONDICION CADENA
+            }
+            if(e.tipo == "ent" || e.tipo == "flot"){
+                CondNum();// SI ES FLOT O ENT SE DIRIGE A CONDICION NUM
+            }
+            break;
+        }
+    }
+    if(v==false){
+        error=1;
+        CondDefault();//EN CASO DE QUE NO EXISTE LA VARIABLE SE HACE UN RECORRIDO SIN RESTRICCIONES POR EL TIPO DE DATO
+    } 
+}
+
+void CondDefault():{}
+{
+    OperadoresDef()Identificador()
+}
+
+void OperadoresDef():{}
+{
+    <CompMAYOR>{ECI.EscribirB("> ");}
+    |<CompMENOR>{ECI.EscribirB("< ");}
+    |<CompIGUAL>{ECI.EscribirB("== ");}
+    |<CompDIFERENTE>{ECI.EscribirB("!= ");}
+    |<CompMAY_IGUAL>{ECI.EscribirB(">= ");}
+    |<CompMEN_IGUAL>{ECI.EscribirB("<= ");}
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '" + token.image +"', se esperaba 'myq', 'mnq', 'myiq', 'mniq', 'dif', 'igu'"); error=1;}
+    |LEX()
+    | {{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un operador l\u00f3gico");} error=1;}  
+}
+
+void CondCad():{}
+{
+    OperadoresCad()
+    (<ID_VARIABLE>{
+        Valor = token.image+"";
+        String v=remfc(token.image);
+        trans.EscribirCod(v);
+        ECI.EscribirB(token.image+" ");
+        validacionCad();
+    }
+    |<NUM_ENTERO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un identificador");error=1;}
+    |<NUM_FLOTANTE>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un identificador");error=1;}
+    |<CADENAS>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 "+ token.image +", se esperaba un identificador");error=1;}
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 "+ token.image +", se esperaba un identificador");error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el identificador");error=1;})
+}
+
+void CondNum():{}
+{
+    OperadoresNum()
+    Identificador(){    
+        ECI.EscribirB(token.image+" ");
+        validacionNum();
+    }
+}
+//----------- CONDICIONALES -------------------------------------------------------
+
+// GRAMATICA PARA EL IF = si(@a myq @b){}
+void If():{}
+{
+    Esi(){ECI.EscribirB("\n"+"L"+(++label)+": if ");}AParent()Condic()CParent(){ECI.EscribirB(" goto L"+(label+1)+"\n");}ALlave()(Sentencias())* CLlave()[<CondIF_ELSE>{ECI.EscribirB(" \nL"+(++label)+": If Else goto L"+(label+1)+"\n");trans.EscribirCod("else");Sino();}]
+}
+
+//EN CASO DE PONER SINO ENTRA EL NUEVO METODO sino{} Despues de cerrar las llaves puede haber mas sinos
+void Sino() throws ParseException:{}
+{
+    ALlave() (Sentencias())* CLlave()[<CondIF_ELSE>{ECI.EscribirB(" \nElse goto L"+(label+1));trans.EscribirCod("else");Sino();}]
+}
+
+//------------- CICLOS --------------------------------------------------------
+
+void Ciclos():{}
+{
+    Parar(){}
+    |Mientras()
+}
+
+//GRAMATICA PARA EL CICLO FOR = parar[ent @z = 3 o @z = 3][@z mnq @b][dism @b:2]{}
+void Parar():{}
+{
+    <RFor>{trans.EscribirCod("for");}CondF()ALlave() (Sentencias())* CLlave(){ 
+        ECI.EscribirB(" \nL"+(++label)+" "+variable+" = "+variable+operacion+cantidad);
+        ECI.EscribirB(" \ngoto L"+labelB);
+        ECI.EscribirB(" \nElse goto L"+(label+1));
+    }
+}
+
+void CondF():{}  // for[@x =3][@a mnq @b][aum @x:3]{}
+{
+    ACorch(){trans.EscribirCod("(");}AsignFor()CCorch() 
+    ACorch(){ECI.EscribirB("\n"+"L"+(++label)+": if ");labelB=label;}Condic()CCorch(){ECI.EscribirB(" goto L"+(label+1));trans.EscribirCod(";");}
+    ACorch()Aumentar()CCorch()
+}
+
+//GRAMATICA PARA AUMENTAR O DISMINUIR aum @b : 3
+void Aumentar():{}
+{
+    (<AUMENTAR>{operacion="+";bandf=1;}|<DISMINUIR>{operacion="-";bandf=2;})IdentificadorEntero(){variable=token.image+"";}Puntos(){trans.EscribirCod(opfor(bandf));}Entero(){cantidad=token.image+"";trans.EscribirCod(")");}
+}
+JAVACODE
+public String opfor(int opcion){
+    if(opcion==1){
+        return "+=";
+    }if(opcion==2){
+        return "-=";
+    }
+    return "";
+}
+void IdentificadorEntero():{}
+{
+    <ID_VARIABLE>{
+        Valor = token.image+"";
+        validacionEnt();
+        String v=remfc(token.image);
+        trans.EscribirCod(v);
+    }
+    |<NUM_ENTERO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un identificador");error=1;}
+    |<NUM_FLOTANTE>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un identificador");error=1;}
+    |<CADENAS>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 "+ token.image +", se esperaba un identificador");error=1;}
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 "+ token.image +", se esperaba un identificador");error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el identificador");error=1;}
+}
+
+//GRAMATICA PARA EL WHILE = mientras[@b igu @c]{}
+
+void Mientras():{}
+{
+    <RWhile>{ECI.EscribirB("L"+(++label)+": If ");trans.EscribirCod("while ");labelB=label;}CondW()ALlave(){ECI.EscribirB(" goto L"+(label+1));}(Sentencias())*{ECI.EscribirB(" \ngoto L"+labelB+"\nElse goto L"+(label+1)+"\n");} CLlave()
+}
+
+//GRAMATICA DE LA CONDICION PARA EL WHILE = @b mnq @a
+
+void CondW():{}
+{
+    ACorch(){trans.EscribirCod("(");}Condic()CCorch(){trans.EscribirCod(")");}
+}
+
+//---------------------------------------- FIN DE GRAMATICAS --------------------------------------------------------
+
+//-------------------------------------  BLOQUE DE ERRORES SINTACTICOS ---------------------------------------------
+
+// A PARTIR DE AQUI SON METODOS UTILIZADOS PARA COMPROBAR ERRORES EN LAS DISTINTAS GRAMATICAS
+// POR EJEMPLO A LA HORA DE ABRIR LLAVES SE COMPRUEBA QUE SEAN LLAVES O QUE EXISTAN ASI CON LOS DEMAS EN SUS RESPECTIVAS GRAMATICAS
+// ESTO SE HIZO PARA AHORRAR CODIGO Y NO HACER LAS VALIDACIONES CADA VEZ QUE SE OCUPEN DICHOS ELEMENTOS
+
+void AsignFor():{}
+{
+    <ID_VARIABLE>{
+        Valor = token.image+"";
+        String v=remfc(token.image);
+        trans.EscribirCod(v);
+        AsignacionCiclo();
+        
+    }
+    |<NUM_ENTERO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un identificador");
+        error=1;
+        DeclaracionesEnteros();
+    }
+    |<NUM_FLOTANTE>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un identificador");
+        error=1;
+        DeclaracionesEnteros();}
+    |<CADENAS>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 "+ token.image +", se esperaba un identificador");
+        error=1;
+        DeclaracionesEnteros();
+    }
+    |<ALFABETO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 "+ token.image +", se esperaba un identificador");
+        error=1;
+        DeclaracionesEnteros();
+    }
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el identificador");error=1;}    
+}
+
+void Cadenas():{} //Cadenas o variables para las salidas 
+{
+    <CADENAS>{trans.EscribirCod(token.image+" ");}
+    |<ID_VARIABLE>{
+        Valor = token.image+"";
+        String a=remfc(token.image);
+        trans.EscribirCod(a);
+        ExistenciaIDs();
+    }
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba una cadena o un identificador"); error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el dato a mostrar"); error=1;}
+}
+
+void Entero():{} //numeros enteros
+{
+    <NUM_ENTERO>{trans.EscribirCod(token.image);}
+    |<NUM_FLOTANTE>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un n\u00famero entero"); error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el n\u00famero entero"); error=1;}
+}
+
+void Puntos():{} //dos puntos
+{
+    <DPUNTOS>
+    |<PUNTO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba ':'"); error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 ':'"); error=1;}
+}
+
+void ACorch():{} //abrir corchete
+{
+    <CorchA>
+    |(<ParentA>|<LlaveA>){System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba '['"); error=1;}
+    |LEX()
+    //CADENA VACIA O TOKEN 
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 '['"); error=1;}
+}
+
+void CCorch():{} // cerrar corchete
+{
+    <CorchC>
+    |(<ParentC>|<LlaveC>){System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba ']'"); error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 ']'"); error=1;}
+}
+
+void Esi():{} // palabra si
+{
+    <CondIF>{trans.EscribirCod("if ");}
+    |LEX()
+}
+
+void ALlave():{} //Abrir llave
+{
+    <LlaveA>{trans.EscribirCod("{ \n");}
+    |<CorchA>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba '{'"); error=1;}
+    |<ParentA>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba '{'"); error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 '{'"); error=1;}
+}
+
+void CLlave():{}// Cerrar llave
+{
+    <LlaveC>{trans.EscribirCod("} \n");}
+    |<CorchC>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba '}'"); error=1;}
+    |<ParentC>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba '}'"); error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 '}'"); error=1;}
+}
+
+void En():{} //Entrada
+{
+    <INPUT>{trans.EscribirCod("cin >> ");}
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba 'ingresar' "); error=1;}
+    |LEX()
+}
+
+void Sal():{} //Salida
+{
+    <OUTPUT>{trans.EscribirCod("cout << ");}
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba 'ingresar' "); error=1;}
+    |LEX()
+}
+
+void AParentIO():{} // Abrir Parentesis para entrada y salida
+{
+    <ParentA>
+    |<CorchA>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba '(' "); error=1;}
+    |<LlaveA>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba '(' "); error=1;}
+    |LEX()
+    | {{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 '('");} error=1;}
+}
+
+void CParentIO():{} // Cerrar Parentesis para entrada y salida
+{
+    <ParentC>
+    |<CorchC>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba ')'"); error=1;}
+    |<LlaveC>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba ')' "); error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 ')'"); error=1;}
+}
+void AParent():{} // Abrir Parentesis
+{
+    <ParentA>{trans.EscribirCod("( ");}
+    |<CorchA>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba '(' "); error=1;}
+    |<LlaveA>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba '(' "); error=1;}
+    |LEX()
+    | {{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 '('");} error=1;}
+}
+
+void CParent():{} // Cerrar Parentesis
+{
+    <ParentC>{trans.EscribirCod(") ");}
+    |<CorchC>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba ')'"); error=1;}
+    |<LlaveC>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba ')' "); error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 ')'"); error=1;}
+}
+
+void Punto():{} // Punto
+{
+    <PUNTO>{trans.EscribirCod(";\n");}
+    |<DPUNTOS>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 " + token.image +", se esperaba '.'"); error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el '.'"); error=1;}
+}
+
+
+void Identificador():{} //Variables
+{
+    <ID_VARIABLE>{
+        Valor = token.image+"";
+        String a=remfc(token.image);
+        trans.EscribirCod(a);
+        ExistenciaIDs();
+    }
+    |<NUM_ENTERO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un identificador");error=1;}
+    |<NUM_FLOTANTE>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un identificador");error=1;}
+    |<CADENAS>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 "+ token.image +", se esperaba un identificador");error=1;}
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 "+ token.image +", se esperaba un identificador");error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el identificador");error=1;}
+}
+
+void IdentificadorDec():{} //VARIABLES PARA DECLARACIONES
+{
+    <ID_VARIABLE>{
+        String v=remfc(token.image);
+        trans.EscribirCod(v);
+    }
+    |<NUM_ENTERO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un identificador");error=1;}
+    |<NUM_FLOTANTE>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un identificador");error=1;}
+    |<CADENAS>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 "+ token.image +", se esperaba un identificador");error=1;}
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 "+ token.image +", se esperaba un identificador");error=1;}
+    |LEX()
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el identificador");error=1;}
+}
+
+//---------------------------------------- FIN DE ERRORES SINTACTICOS --------------------------------------------------------
+
+//--------------------------------------- BLOQUE DE ERRORES LEXICOS --------------------------------------------
+
+//COMPRUEBA QUE LO QUE SE INGRESO NO PERTENEZCA A LA LISTA DE VALORES NO PERMITIDOS
+
+void LEX():{}
+{
+    <ERRORES>{System.out.println("Error l\u00e9xico: en la L\u00ednea: "+ token.beginLine + " Columna: "+ token.beginColumn + " el s\u00edmbolo ("+token.image+") no es reconocido"); error=1;}
+}
+
+//---------------------------------------- FIN DE BLOQUE DE ERRORES LEXICOS ----------------------------------------------
+
+// --------------------------- ERRORES SEMANTICOS -----------------------------------------
+void OperadoresCad():{} //Operadores logicos
+{
+    <CompMAYOR>{ECI.EscribirB("> "); System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" el tipo de comparaci\u00f3n no es compatible con el tipo de dato, intenta con ==,!=");error=1;}
+    |<CompMENOR>{ECI.EscribirB("< ");System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" el tipo de comparaci\u00f3n no es compatible con el tipo de dato, intenta con ==,!=");error=1;}
+    |<CompIGUAL>{ECI.EscribirB("== ");}
+    |<CompDIFERENTE>{ECI.EscribirB("!= ");}
+    |<CompMAY_IGUAL>{ECI.EscribirB(">= ");System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" el tipo de comparaci\u00f3n no es compatible con el tipo de dato, intenta con ==,!=");error=1;}
+    |<CompMEN_IGUAL>{ECI.EscribirB("<= ");System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" el tipo de comparaci\u00f3n no es compatible con el tipo de dato, intenta con ==,!=");error=1;}
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '" + token.image +"', se esperaba 'myq', 'mnq', 'myiq', 'mniq', 'dif', 'igu'"); error=1;}
+    |LEX()
+    | {{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un operador l\u00f3gico");} error=1;}
+}
+
+void OperadoresNum():{} //Operadores logicos
+{
+    <CompMAYOR>{ECI.EscribirB("> ");trans.EscribirCod(" > ");}
+    |<CompMENOR>{ECI.EscribirB("< ");trans.EscribirCod(" < ");}
+    |<CompIGUAL>{ECI.EscribirB("== ");trans.EscribirCod(" == ");}
+    |<CompDIFERENTE>{ECI.EscribirB("!= ");trans.EscribirCod(" != ");}
+    |<CompMAY_IGUAL>{ECI.EscribirB(">= ");trans.EscribirCod(" >= ");}
+    |<CompMEN_IGUAL>{ECI.EscribirB("<= ");trans.EscribirCod(" <= ");}
+    |<ALFABETO>{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '" + token.image +"', se esperaba 'myq', 'mnq', 'myiq', 'mniq', 'dif', 'igu'"); error=1;}
+    |LEX()
+    | {{System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un operador l\u00f3gico");} error=1;}
+}
+
+//--------------------------------------- BLOQUE DE VALIDACIONES -----------------------------------------------------------------
+
+//VARIABLES
+JAVACODE 
+public void ingresoIDs(){//almacenamiento de identificadores y su tipo
+    ParOrdenado.add(new ParOrd(Type, Valor));
+    ECI.EscribirD("\nL"+(++label)+": "+Type + "   " + Valor );
+}
+JAVACODE
+public void validacionIDs(){//validacion de que no existe otra variable con el mismo nombre declarada
+    boolean v = false;
+    for(ParOrd e : ParOrdenado){
+        if(e.id.equals(Valor)){
+            v  = true;
+            break;
+        }
+    }
+    if(v==true){
+        System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" ya ha sido declarada");
+        error = 1;
+    } else ingresoIDs();
+}
+
+//EXISTENCIAS
+JAVACODE
+public void ExistenciaIDs(){//validacion de que las variables hayan sido declaradas
+    boolean v = false;
+    for(ParOrd e : ParOrdenado){
+        if(e.id.equals(Valor)){
+            v = true;
+            break;
+        }
+    }
+    if(!v){
+        System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" no ha sido declarada");
+        error = 1;
+    } 
+    
+}
+// VARIABLES PARA C++
+JAVACODE
+public String remfc(String str){
+    if(str==null||str.length()==0){
+        return str;
+    }
+    return str.substring(1);
+}
+//ASIGNACIONES
+JAVACODE
+public void validacionAsig(){
+    String tipo = "";
+    boolean v = false;
+    for(ParOrd e : ParOrdenado){
+        if(e.id.equals(Valor)){
+            v = true;
+            if(e.tipo == "cad"){
+                DeclaracionesCadenas();
+            }
+            if(e.tipo == "ent"){
+                DeclaracionesEnteros();
+            }
+            if(e.tipo == "flot"){
+                DeclaracionesFlotantes();
+            }
+            break;
+        }
+    }
+    if(v==false){
+        System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" no ha sido declarada");
+        error=1;
+        DERROR();
+    } 
+}
+
+void DERROR() throws ParseException:{}
+{
+    <ASIGNAR>{
+        DE();
+    }
+    |<NUM_FLOTANTE>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        error=1;
+        DET();
+    }
+    |<NUM_ENTERO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        error=1;
+        DET();
+    }
+    |<CADENAS>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        error=1;
+        DET();
+    }
+    |<ID_VARIABLE>{
+        Valor = token.image+"";
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        error=1;
+        ExistenciaIDs();
+        DET();
+    }    
+    |<SUMA>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        DE();
+    }
+    |<MULTIPLICACION>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        DE();
+    }
+    |<RESTA>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        DE();
+    }
+    |<DIVISION>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        DE();        
+    }
+    |<RESIDUO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el s\u00edmbolo de asignacion '='");
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato, intenta con una cadena o un operando");
+        DE();        
+    }
+    | <PUNTO> 
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 no se ingres\u00f3 el '.'");error=1;}   
+}
+
+void DE() throws ParseException:{}
+{
+    <NUM_FLOTANTE>{
+        DET();
+    }
+    |<NUM_ENTERO>{
+        DET();
+    }
+    |<ID_VARIABLE>{
+        Valor = token.image+"";
+        ExistenciaIDs();
+        DET();
+    }
+    |<CADENAS>{
+        DET();
+    }
+    |<ALFABETO>{
+        System.out.println("Error sem\u00e1ntico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " se ingres\u00f3 '"+ token.image +"', se esperaba un valor num\u00e9rico,cadena o variable");error=1;
+        DET();
+    }
+    |{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 un dato");
+        error=1;
+       DET();
+    } 
+}
+
+void DET() throws ParseException:{}
+{
+    //TERMINAL
+    <PUNTO>
+    //NO-TERMINALES ACEPTADOS
+    |<SUMA>{
+        DE();
+    }
+    |<MULTIPLICACION>{
+        DE();
+    }
+    |<RESTA>{
+        DE();
+    }
+    |<DIVISION>{
+        DE();        
+    }
+    |<RESIDUO>{
+        DE();        
+    }    
+    |<NUM_ENTERO>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador");
+        error=1;
+        DET();
+    }
+    |<NUM_FLOTANTE>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador");
+        error=1;
+        DET();
+    }
+    |<CADENAS>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +,-,*");
+        error=1;
+        DET();
+    }
+    |<ID_VARIABLE>{
+        System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el operador, intenta con +,-,*");
+        Valor = token.image+"";
+        ExistenciaIDs();
+        DET();
+    }
+    | {System.out.println("Error sint\u00e1ctico: en la L\u00ednea: "+ token.beginLine +" Columna: "+ token.beginColumn + " no se ingres\u00f3 el '.'");error=1;}       
+}
+
+//TIPO DE DATO
+
+JAVACODE 
+public void validacionNum(){
+    String tipo = "";
+    boolean v = false;
+    for(ParOrd e : ParOrdenado){
+        if(e.id.equals(Valor)){
+            v = true;
+            if(e.tipo == "cad"){
+                System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" no es de tipo num\u00e9rico");
+                error = 1;
+            }
+            break;
+        }
+    }
+    if(v==false){
+        error = 1;
+    }
+}
+JAVACODE
+public void validacionEnt(){
+    String tipo = "";
+    boolean v = false;
+    for(ParOrd e : ParOrdenado){
+        if(e.id.equals(Valor)){
+            v = true;
+            if(e.tipo != "ent"){
+                System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" no es de tipo entero");
+                error = 1;
+            }
+            break;
+        }
+    }
+    if(v==false){
+        System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" no ha sido declarada");
+        error = 1;
+    }
+}
+JAVACODE
+public void validacionFlot(){
+    String tipo = "";
+    boolean v = false;
+    for(ParOrd e : ParOrdenado){
+        if(e.id.equals(Valor)){
+            v = true;
+            if(e.tipo != "flot"){
+                System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" no es de tipo num\u00e9rico");
+                error = 1;
+            }
+            break;
+        }
+    }
+    if(v==false){
+        System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" no ha sido declarada");
+        error = 1;
+    }
+}
+JAVACODE
+public void validacionCad(){
+    String tipo = "";
+    boolean v = false;
+    for(ParOrd e : ParOrdenado){
+        if(e.id.equals(Valor)){
+            v = true;
+            if(e.tipo != "cad"){
+                System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" no es de tipo cadena");
+                error = 1;
+            }
+            break;
+        }
+    }
+    if(v==false){
+        System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" no ha sido declarada");
+        error = 1;
+    }
+}
+
+//ASIGNACION EN CICLO FOR
+JAVACODE
+public void AsignacionCiclo(){
+    String tipo = "";
+    boolean v = false;
+    for(ParOrd e : ParOrdenado){
+        if(e.id.equals(Valor)){
+            v = true;
+            if(e.tipo == "cad"){
+                System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+Valor+" no es de tipo num\u00e9rico");
+                DeclaracionesCadenas();
+            }
+            if(e.tipo == "ent"){
+                DeclaracionesEnteros();
+            }
+            if(e.tipo == "flot"){
+                DeclaracionesFlotantes();
+            }
+            break;
+        }
+    }
+    if(v==false){
+        System.out.println("Error sem\u00e1ntico en la L\u00ednea : "+token.beginLine+" Columna: "+token.beginColumn+" la variable: "+ Valor +" no ha sido declarada");
+        DERROR();
+    } 
+}
+
+//----------------------------- LEXICO ---------------------------------------------------------
+/*void Inicio():{}{
+    (LecturaTokens())+
+}
+
+void LecturaTokens():{}{
+    <INICIO>
+    |<FIN>
+    |<ENTERO>
+    |<FLOAT>
+    |<CADENA>
+    |<INPUT>
+    |<OUTPUT>
+    |<CondIF>
+    |<CondIF_ELSE>
+    |<RWhile>
+    |<RFor>
+    |<SUMA>
+    |<RESTA>
+    |<DIVISION>
+    |<MULTIPLICACION>
+    |<RESIDUO>
+    |<POTENCIA>
+    |<AND>
+    |<OR>
+    |<NOT>
+    |<CompMAYOR>
+    |<CompMENOR>
+    |<CompMAY_IGUAL>
+    |<CompMEN_IGUAL>
+    |<CompIGUAL>
+    |<CompDIFERENTE>
+    |<ParentA>
+    |<ParentC>
+    |<CorchA>
+    |<CorchC>
+    |<LlaveA>
+    |<LlaveC>  
+    |<ASIGNAR>
+    |<ID_VARIABLE>
+    |<NUM_ENTERO>
+    |<NUM_FLOTANTE>
+    |<CADENAS>
+    |<ERRORES>
+}
+*/

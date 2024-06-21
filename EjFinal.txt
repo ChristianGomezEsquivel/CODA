@@ -1,0 +1,29 @@
+inicio
+
+ent @a.
+ent @b.
+ent @Suma.
+ent @Resta.
+ent @Division.
+ent @Multiplicacion.
+
+mostrar("Ingrese el primer número ").
+ingresar(@a).
+mostrar("Ingrese el segundo numero ").
+ingresar(@b).
+
+@Suma = @a + @b.
+@Resta = @a - @b.
+@Multiplicacion = @a * @b.
+@Division = @a / @b.
+
+mostrar("Suma "+@Suma).
+mostrar("\n").
+mostrar("Resta "+@Resta).
+mostrar("\n").
+mostrar("Multiplicacion "+@Multiplicacion).
+mostrar("\n").
+mostrar("Division "+@Division).
+mostrar("\n").
+
+fin

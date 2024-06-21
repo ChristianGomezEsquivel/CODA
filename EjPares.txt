@@ -1,0 +1,23 @@
+inicio
+
+ent @fin = 10.
+ent @cero = 0.
+ent @modulo.
+ent @i = 1.
+
+mientras[@i mniq @fin]{
+   @modulo = @i $ 2.
+   si(@modulo igu @cero){
+	mostrar(@i).
+	mostrar("\n").
+   }
+   @i = @i + 1.
+}
+
+fin
+
+
+
+
+
+
